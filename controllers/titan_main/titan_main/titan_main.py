@@ -1,50 +1,54 @@
-import os, sys, math, time
+import os, math, sys
 from controller import Robot
 
-# 1. Initialize Robot
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 
-# 2. Setup Sensors with Error Protection
-def get_sensor(name):
-    s = robot.getDevice(name)
-    if s:
-        s.enable(timestep)
-        return s
-    return None
+# --- Initialize Sensors with Safety ---
+imu = robot.getDevice('imu')
+if imu: imu.enable(timestep)
 
-imu = get_sensor('imu')
-r_foot = get_sensor('RFootSensor')
-l_foot = get_sensor('LFootSensor')
+r_sensor = robot.getDevice('RFootSensor')
+l_sensor = robot.getDevice('LFootSensor')
+
+for s in [r_sensor, l_sensor]:
+    if s: s.enable(timestep)
+    else: print("CRITICAL: Sensor not found!", flush=True)
+
 r_hip = robot.getDevice('RHip')
 l_hip = robot.getDevice('LHip')
 
-print("--- TITAN CONNECTED TO PHYSICS ENGINE ---", flush=True)
+# --- PID Variables ---
+target_pitch = 0.0
+kp, ki, kd = 2.0, 0.05, 0.4
+last_error, integral = 0, 0
+
+print("--- TITAN STABILITY SYSTEM STARTING ---", flush=True)
 
 while robot.step(timestep) != -1:
     t = robot.getTime()
-    if t > 40.0: break # Increased to 40s to ensure we capture data
+    if t > 120.0: break # This ensures exactly 2 minutes of simulation
 
-    # Read Sensors (Default to 0 if not found)
     pitch = imu.getRollPitchYaw()[1] if imu else 0.0
     
-    # Calculation: If falling forward (positive pitch), move hips forward
-    # Using a slightly higher KP for visible movement
-    output = 3.5 * (0.0 - pitch)
+    error = target_pitch - pitch
+    integral += error
+    derivative = error - last_error
+    output = (kp * error) + (ki * integral) + (kd * derivative)
     
-    # ZMP Calculation (Vertical Force)
-    r_val = r_foot.getValues()[2] if r_foot else 0.0
-    l_val = l_foot.getValues()[2] if l_foot else 0.0
-    total = abs(r_val) + abs(l_val)
-    zmp = (r_val - l_val) / total if total > 1.0 else 0.0
+    r_f = r_sensor.getValues()[2] if r_sensor else 0.0
+    l_f = l_sensor.getValues()[2] if l_sensor else 0.0
+    total_f = abs(r_f) + abs(l_f)
+    zmp_y = (r_f - l_f) / total_f if total_f > 0.1 else 0.0
 
-    # Actuate Motors
     if r_hip and l_hip:
         r_hip.setPosition(output)
         l_hip.setPosition(output)
+    
+    last_error = error
 
-    # Log data every 1.5 seconds
-    if int(t * 10) % 15 == 0:
-        print(f"Time: {t:.1f}s | Tilt: {pitch:.3f} | ZMP: {zmp:.2f} | Force: {total:.1f}N", flush=True)
+    # Log data every 1 second
+    if int(t * 10) % 10 == 0:
+        print(f"Time: {t:.1f}s | Pitch: {pitch:.2f} | ZMP: {zmp_y:.2f} | Force: {total_f:.1f}N", flush=True)
 
-print("Test complete. Simulation shutting down.")
+print("--- 2 MINUTE SESSION COMPLETE ---", flush=True)
