@@ -1,34 +1,55 @@
-import os
-import math
+import os, math, sys
 from controller import Robot
 
-# 1. Initialize the Robot
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 
-# 2. Get Device Handles
-# Make sure these names "RHip" and "LHip" match your Titan.proto exactly!
+# --- Initialize Sensors ---
+imu = robot.getDevice('imu')
+imu.enable(timestep)
+
+r_sensor = robot.getDevice('RFootSensor')
+l_sensor = robot.getDevice('LFootSensor')
+r_sensor.enable(timestep)
+l_sensor.enable(timestep)
+
+# --- Initialize Motors ---
 r_hip = robot.getDevice('RHip')
 l_hip = robot.getDevice('LHip')
 
-# 3. Validation Check
-if r_hip is None or l_hip is None:
-    print("ERROR: Hip devices not found! Check your PROTO names.", flush=True)
-else:
-    print("--- TITAN CONTROLLER: ONLINE AND CONNECTED ---", flush=True)
+# --- PID Variables ---
+target_pitch = 0.0
+kp, ki, kd = 2.5, 0.1, 0.5
+last_error, integral = 0, 0
 
-# 4. Main Control Loop
+print("--- TITAN HUMAN-LOGIC ONLINE ---", flush=True)
+
 while robot.step(timestep) != -1:
-    t = robot.getTime()
+    # 1. IMU DATA (Inner Ear)
+    pitch = imu.getRollPitchYaw()[1]
     
-    # Create a smooth swinging motion for the hips
-    # Using 1.5 frequency to make the movement visible
-    val = math.sin(t * 1.5) * 0.5
+    # 2. PID BALANCE
+    error = target_pitch - pitch
+    integral += error
+    derivative = error - last_error
+    output = (kp * error) + (ki * integral) + (kd * derivative)
     
-    r_hip.setPosition(val)
-    l_hip.setPosition(-val)
+    # 3. ZMP CALCULATION (Foot Pressure)
+    r_force = r_sensor.getValues()[2] # Vertical force on right foot
+    l_force = l_sensor.getValues()[2] # Vertical force on left foot
+    total_force = r_force + l_force
     
-    # 5. Forced Output for Colab
-    # Prints every 1 second of simulation time
-    if int(t * 10) % 10 == 0: 
-        print(f"Time: {t:.2f}s | Hips swinging to: {val:.3f}", flush=True)
+    # Simple ZMP: If weight is 100% on one side, ZMP is at that foot
+    if total_force > 0:
+        zmp_y = (r_force - l_force) / total_force
+    else:
+        zmp_y = 0
+
+    # Apply PID output to Hip Motors to catch the fall
+    r_hip.setPosition(output)
+    l_hip.setPosition(output)
+    
+    last_error = error
+
+    if int(robot.getTime() * 10) % 20 == 0:
+        print(f"Time: {robot.getTime():.2f}s | Pitch: {pitch:.2f} | ZMP_Y: {zmp_y:.2f}", flush=True)
