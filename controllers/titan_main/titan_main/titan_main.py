@@ -1,22 +1,34 @@
 import os
+import math
 from controller import Robot
 
-# The brain connecting to the body
+# 1. Initialize the Robot
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 
-# Get devices
+# 2. Get Device Handles
+# Make sure these names "RHip" and "LHip" match your Titan.proto exactly!
 r_hip = robot.getDevice('RHip')
 l_hip = robot.getDevice('LHip')
 
-print("--- CONTROLLER CONNECTED TO TITAN SUCCESSFUL ---")
+# 3. Validation Check
+if r_hip is None or l_hip is None:
+    print("ERROR: Hip devices not found! Check your PROTO names.", flush=True)
+else:
+    print("--- TITAN CONTROLLER: ONLINE AND CONNECTED ---", flush=True)
 
+# 4. Main Control Loop
 while robot.step(timestep) != -1:
-    import math
-    val = math.sin(robot.getTime()) * 0.5
+    t = robot.getTime()
+    
+    # Create a smooth swinging motion for the hips
+    # Using 1.5 frequency to make the movement visible
+    val = math.sin(t * 1.5) * 0.5
+    
     r_hip.setPosition(val)
     l_hip.setPosition(-val)
     
-    # ADD THIS LINE TO SEE PROGRESS IN COLAB:
-    if int(robot.getTime()) % 2 == 0: 
-        print(f"Robot Time: {robot.getTime():.2f} - Hips moving to {val:.2f}")
+    # 5. Forced Output for Colab
+    # Prints every 1 second of simulation time
+    if int(t * 10) % 10 == 0: 
+        print(f"Time: {t:.2f}s | Hips swinging to: {val:.3f}", flush=True)
