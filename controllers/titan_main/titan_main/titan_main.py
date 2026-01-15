@@ -1,60 +1,47 @@
-import os, math, sys
+import os, sys, math
 from controller import Robot
 
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 
-# --- Initialize Sensors with Safety ---
-imu = robot.getDevice('imu')
-if imu: imu.enable(timestep)
+# --- Safe Initialization ---
+def get_device(name, type):
+    dev = robot.getDevice(name)
+    if dev:
+        if type == "sensor": dev.enable(timestep)
+        return dev
+    print(f"MISSING DEVICE: {name}", flush=True)
+    return None
 
-r_sensor = robot.getDevice('RFootSensor')
-l_sensor = robot.getDevice('LFootSensor')
-for s in [r_sensor, l_sensor]:
-    if s: s.enable(timestep)
+imu = get_device('imu', 'sensor')
+r_sensor = get_device('RFootSensor', 'sensor')
+l_sensor = get_device('LFootSensor', 'sensor')
+r_hip = get_device('RHip', 'motor')
+l_hip = get_device('LHip', 'motor')
 
-# --- Initialize Motors ---
-r_hip = robot.getDevice('RHip')
-l_hip = robot.getDevice('LHip')
-
-# --- PID Balance Constants ---
-target_pitch = 0.0
-kp, ki, kd = 2.0, 0.05, 0.4
-last_error, integral = 0, 0
-
-print("--- TITAN STABILITY SYSTEM: RUNNING 30s TEST ---", flush=True)
+print("--- TITAN STABILITY SYSTEM ONLINE ---", flush=True)
 
 while robot.step(timestep) != -1:
     t = robot.getTime()
-    
-    # 1. STOP LOGIC (Ensures video saves correctly)
-    if t > 30.0:
-        print("30 Seconds reached. Saving video and exiting...", flush=True)
-        break
+    if t > 30.0: break
 
-    # 2. IMU & PID Calculation
+    # 1. Sense
     pitch = imu.getRollPitchYaw()[1] if imu else 0.0
-    error = target_pitch - pitch
-    integral += error
-    derivative = error - last_error
-    output = (kp * error) + (ki * integral) + (kd * derivative)
     
-    # 3. ZMP Logic (Vertical Force)
-    r_f = r_sensor.getValues()[2] if r_sensor else 0.0
-    l_f = l_sensor.getValues()[2] if l_sensor else 0.0
-    total_f = abs(r_f) + abs(l_f)
-    zmp_y = (r_f - l_f) / total_f if total_f > 0.1 else 0.0
-
-    # 4. Motor Actuation
-    if r_hip and l_hip:
-        r_hip.setPosition(output)
-        l_hip.setPosition(output)
+    # 2. Calculate Balance (Simplified PID)
+    # If pitch is positive (falling forward), move hips to compensate
+    error = 0.0 - pitch
+    output = 2.5 * error 
     
-    last_error = error
+    # 3. ZMP (Pressure)
+    r_f = abs(r_sensor.getValues()[2]) if r_sensor else 0.0
+    l_f = abs(l_sensor.getValues()[2]) if l_sensor else 0.0
+    total_f = r_f + l_f
+    zmp_y = (r_f - l_f) / total_f if total_f > 1.0 else 0.0
 
-    # Log data every 2 seconds to keep Colab clean
+    # 4. Actuate
+    if r_hip: r_hip.setPosition(output)
+    if l_hip: l_hip.setPosition(-output) # Opposite direction for balance
+
     if int(t * 10) % 20 == 0:
-        print(f"Time: {t:.1f}s | Tilt: {pitch:.2f} | ZMP: {zmp_y:.2f}", flush=True)
-
-# Final command to ensure Webots knows we are done
-print("Controller Finished.", flush=True)
+        print(f"T: {t:.1f}s | Pitch: {pitch:.3f} | ZMP: {zmp_y:.3f} | Force: {total_f:.1f}", flush=True)
