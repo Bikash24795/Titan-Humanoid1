@@ -1,4 +1,4 @@
-#VRML_SIM R2025a utf8
+#VRML_SIM R2023b utf8
 PROTO Titan [
   field SFVec3f    translation 0 0.9 0
   field SFRotation rotation    0 1 0 0
@@ -12,58 +12,65 @@ PROTO Titan [
     controller IS controller
     name IS name
     children [
+      # --- SENSORS ---
+      InertialUnit {
+        name "imu"
+      }
+      GPS {
+        name "gps"
+      }
+      
       # --- TORSO ---
       DEF TORSO Solid {
         children [
-          # Visual Body
           Shape {
-            appearance PBRAppearance { baseColor 0.8 0.1 0.1 metalness 0.5 }
+            appearance PBRAppearance { baseColor 0.8 0.1 0.1 roughness 0.5 }
             geometry Box { size 0.2 0.3 0.15 }
           }
-          # --- HEAD ---
-          Solid {
-            translation 0 0.25 0
-            name "head"
-            children [
-              Shape {
-                appearance PBRAppearance { baseColor 0.2 0.2 0.2 }
-                geometry Sphere { radius 0.1 }
-              }
-            ]
-            boundingObject Sphere { radius 0.1 }
-            physics Physics { mass 0.5 density -1 }
-          }
-          # --- RIGHT LEG ---
-          HingeJoint {
-            jointParameters HingeJointParameters { anchor 0.08 -0.15 0 axis 1 0 0 }
-            device [ RotationalMotor { name "RHip" } ]
-            endPoint Solid {
-              name "right_leg_solid"
-              translation 0.08 -0.3 0
-              children [
-                Shape { geometry Box { size 0.05 0.4 0.05 } }
-              ]
-              boundingObject Box { size 0.05 0.4 0.05 }
-              physics Physics { mass 2 density -1 }
-            }
-          }
-          # --- LEFT LEG ---
-          HingeJoint {
-            jointParameters HingeJointParameters { anchor -0.08 -0.15 0 axis 1 0 0 }
-            device [ RotationalMotor { name "LHip" } ]
-            endPoint Solid {
-              name "left_leg_solid"
-              translation -0.08 -0.3 0
-              children [
-                Shape { geometry Box { size 0.05 0.4 0.05 } }
-              ]
-              boundingObject Box { size 0.05 0.4 0.05 }
-              physics Physics { mass 2 density -1 }
-            }
-          }
         ]
-        boundingObject Box { size 0.2 0.3 0.15 }
-        physics Physics { mass 5 density -1 }
+        physics Physics { mass 0.5 }
+      }
+
+      # --- RIGHT LEG ---
+      HingeJoint {
+        jointParameters HingeJointParameters { anchor 0.08 -0.15 0 axis 1 0 0 }
+        device [ RotationalMotor { name "RHip" } ]
+        endPoint Solid {
+          name "right_leg_solid"
+          translation 0.08 -0.3 0
+          children [
+            Shape { geometry Box { size 0.05 0.4 0.05 } }
+            # FOOT SENSOR
+            TouchSensor {
+              name "RFootSensor"
+              boundingObject Box { size 0.05 0.01 0.05 }
+              physics Physics {}
+            }
+          ]
+          boundingObject Box { size 0.05 0.4 0.05 }
+          physics Physics { mass 2 }
+        }
+      }
+
+      # --- LEFT LEG ---
+      HingeJoint {
+        jointParameters HingeJointParameters { anchor -0.08 -0.15 0 axis 1 0 0 }
+        device [ RotationalMotor { name "LHip" } ]
+        endPoint Solid {
+          name "left_leg_solid"
+          translation -0.08 -0.3 0
+          children [
+            Shape { geometry Box { size 0.05 0.4 0.05 } }
+            # FOOT SENSOR
+            TouchSensor {
+              name "LFootSensor"
+              boundingObject Box { size 0.05 0.01 0.05 }
+              physics Physics {}
+            }
+          ]
+          boundingObject Box { size 0.05 0.4 0.05 }
+          physics Physics { mass 2 }
+        }
       }
     ]
   }
